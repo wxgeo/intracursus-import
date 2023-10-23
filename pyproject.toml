@@ -1,22 +1,23 @@
 [tool.poetry]
 name = "intracursus-import"
 version = "0.1.0"
-description = ""
+description = "Import students scores into Intracursus file."
 authors = ["Nicolas Pourcelot <nicolas.pourcelot@gmail.com>"]
+license = "GPL-2.0-or-later"
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
 fire = "^0.5.0"
-openpyxl = "^3.1.2"
 pyexcel-ods3 = "^0.6.1"
-pyexcel = "^0.7.0"
 
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.10.0"
 mypy = "^1.6.1"
-openpyxl-stubs = "^0.1.25"
+
+[tool.poetry.scripts]
+import-scores = 'intracursus_import.intracursus_import:main'
 
 [build-system]
 requires = ["poetry-core"]
