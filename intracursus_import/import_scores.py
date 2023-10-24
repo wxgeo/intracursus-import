@@ -6,8 +6,8 @@ from dataclasses import field, dataclass
 from functools import cache
 from pathlib import Path
 
-import pyexcel_ods3
-from fire import Fire
+import pyexcel_ods3  # type: ignore
+from fire import Fire  # type: ignore
 
 CONVERSION = (
     "éèêë" "àâ" "ôö" "ùûü" "îï" "ç" "ñ" "-_",
@@ -15,21 +15,21 @@ CONVERSION = (
 )
 TABLE = str.maketrans(*CONVERSION)
 
-SheetData = list[list[str | int]]
+SheetData = list[list[str | float | int]]
 
 
 @dataclass
 class IntracursusData:
     ids: list[int]
     names: list[str]
-    scores: list[float] = field(default_factory=list)
+    scores: list[float | str] = field(default_factory=list)
 
 
 @dataclass
 class OtherData:
     ids: list[int] = field(default_factory=list)
     names: list[str] = field(default_factory=list)
-    scores: list[float] = field(default_factory=list)
+    scores: list[float | str] = field(default_factory=list)
 
 
 class ProtectedDict(dict):
@@ -102,9 +102,8 @@ def partial_match(name1: str, name2: str) -> bool:
 def seems_an_intracursus_file(sheet: SheetData) -> bool:
     """Return `True` is the file looks like a valid Intracursus file."""
     return (
-        sheet[0][0].startswith(
-            "Liste de tous les étudiants  inscrits à l'unité d'enseignement"
-        )
+        isinstance(sheet[0][0], str)
+        and sheet[0][0].startswith("Liste de tous les étudiants  inscrits à l'unité d'enseignement")
         and sheet[1][0]
         == (
             "Les notes acquises ne doivent pas être modifiées."
@@ -139,26 +138,26 @@ def find_first_data_row(other_sheet: SheetData) -> int:
 
 def get_other_data(other_sheet: SheetData) -> OtherData:
     i: int = find_first_data_row(other_sheet)
-    columns = list(zip(*other_sheet[i:]))
+    columns: list[list[str | int | float]] = list(zip(*other_sheet[i:]))  # type: ignore
     ids: list[int] = []
-    scores: list[float] = []
+    scores: list[float | str] = []
     names_columns: list[list[str]] = []
     for column in columns:
         if all(isinstance(val, int) and val > 1_000_000 for val in column):
-            ids = column
+            ids = column  # type: ignore
         elif all(isinstance(val, str) for val in column):
-            names_columns.append(column)
+            names_columns.append(column)  # type: ignore
         elif any(isinstance(val, (float, int)) for val in column):
             # Scores to be merged must be the last column that contains numbers.
             # Note that scores column may contain strings too, like "ABI" for example.
-            scores = column
+            scores = column  # type: ignore
     names: list[str] = [" ".join(vals) for vals in zip(*names_columns)]
     return OtherData(ids=ids, names=names, scores=scores)
 
 
 def get_intracursus_data(sheet: SheetData) -> IntracursusData:
     return IntracursusData(
-        *zip(
+        *zip(  # type: ignore
             *(
                 (id_, f"{first_name} {last_name}", score)
                 for (id_, first_name, last_name, score, *_) in sheet[6:]
@@ -175,9 +174,7 @@ def translate_names(
     intracursus = set(intracursus_names)
 
     if len(others) != len(other_names):
-        name, count = next(
-            (name, count) for name, count in Counter(other_names).items() if count > 1
-        )
+        name, count = next((name, count) for name, count in Counter(other_names).items() if count > 1)
         raise DuplicateNamesError(f"The same name was found {count} times: {name!r}.")
 
     found = ProtectedDict(dict.fromkeys(intracursus))
@@ -200,22 +197,16 @@ def translate_names(
     return found, to_be_verified
 
 
-def update_intracursus_data(
-    intracursus_data: IntracursusData, other_data: OtherData
-) -> dict[str, str]:
+def update_intracursus_data(intracursus_data: IntracursusData, other_data: OtherData) -> dict[str, str]:
     to_be_verified: dict[str, str] = {}
     if other_data.ids:
-        scores: dict[int, float] = dict(zip(other_data.ids, other_data.scores))
+        scores: dict[int, float | str] = dict(zip(other_data.ids, other_data.scores))
         intracursus_data.scores = [scores[id_] for id_ in intracursus_data.ids]
     else:
-        names_translation, to_be_verified = translate_names(
-            other_data.names, intracursus_data.names
-        )
-        scores: dict[str, float] = dict(zip(other_data.names, other_data.scores))
-        intracursus_data.scores = [
-            scores.get(names_translation.get(name), "ABI")
-            for name in intracursus_data.names
-        ]
+        names_translation, to_be_verified = translate_names(other_data.names, intracursus_data.names)
+        scores_: dict[str | None, float | str] = dict(zip(other_data.names, other_data.scores))
+        scores_[None] = "ABI"
+        intracursus_data.scores = [scores_[names_translation.get(name)] for name in intracursus_data.names]
     return to_be_verified
 
 
@@ -232,13 +223,22 @@ def fill_scores(intracursus_sheet: SheetData, other_sheet: SheetData) -> None:
         first_name, last_name = intracursus_sheet[i][1:3]
         name = f"{first_name} {last_name}"
         if name in to_be_verified:
-            intracursus_sheet[i].append(to_be_verified[last_name] + " ?")
+            intracursus_sheet[i].append(to_be_verified[name] + " ?")
 
 
-def import_scores(intracursus_file: Path) -> None:
-    if not intracursus_file.is_file():
-        raise FileNotFoundError(intracursus_file)
-    wb = pyexcel_ods3.get_data(str(intracursus_file))
+def import_scores(modified_intracursus_file: Path) -> None:
+    """Helper to import students scores inside Intracursus.
+
+    Read an ODS file from Intracursus, with a second sheet manually added containing students names and scores.
+
+    Generate from that a new ODS file with students scores ready to be imported in Intracursus.
+
+    :param modified_intracursus_file: An ODS file downloaded from Intracursus and modified to include scores (XLS files are NOT supported).
+    :return:
+    """
+    if not modified_intracursus_file.is_file():
+        raise FileNotFoundError(modified_intracursus_file)
+    wb = pyexcel_ods3.get_data(str(modified_intracursus_file))
     all_data = list(wb.values())
     if len(all_data) <= 1:
         raise NothingToMergeError()
@@ -246,13 +246,13 @@ def import_scores(intracursus_file: Path) -> None:
         raise TooManySheetsError()
     elif not seems_an_intracursus_file(all_data[0]):
         raise NotAnIntracursusFileError(
-            f"'{intracursus_file}' does not look like a valid intracursus file."
+            f"'{modified_intracursus_file}' does not look like a valid intracursus file."
         )
 
     fill_scores(*all_data)
     first_sheet_title = list(wb.keys())[0]
     pyexcel_ods3.save_data(
-        str(intracursus_file.with_stem(intracursus_file.stem + "-merged")),
+        str(modified_intracursus_file.with_stem(modified_intracursus_file.stem + "-merged")),
         {first_sheet_title: wb[first_sheet_title]},
     )
 
@@ -262,6 +262,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import_scores(
-        Path(__file__).parent.parent / "tests/Liste-Seance-2-TBFTR106-2023-2024.ods"
-    )
+    import_scores(Path(__file__).parent.parent / "tests/Liste-Seance-2-TBFTR106-2023-2024.ods")

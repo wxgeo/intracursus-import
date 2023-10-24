@@ -11,6 +11,8 @@ python = "^3.11"
 fire = "^0.5.0"
 pyexcel-ods3 = "^0.6.1"
 ruff = "^0.1.1"
+pytest = "^7.4.2"
+tox = "^4.11.3"
 
 [tool.black]
 line-length = 110
@@ -24,6 +26,23 @@ mypy = "^1.6.1"
 
 [tool.poetry.scripts]
 import-scores = 'intracursus_import.intracursus_import:main'
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+skipsdist = true
+isolated_build = True
+envlist = py311
+
+[testenv]
+passenv = HOME
+allowlist_externals = poetry
+commands =
+    poetry install -v
+    poetry run pytest tests
+    poetry run mypy intracursus_import
+    poetry run ruff .
+"""
 
 [build-system]
 requires = ["poetry-core"]
