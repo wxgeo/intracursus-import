@@ -43,5 +43,5 @@ Par conséquent, on rajoute en fin de ligne dans le fichier fusionné le nom com
 correspondant ayant servi à la fusion, afin de pouvoir vérifier que la correspondance
 est correcte.
 
-
+![alt "Le nom tel que saisi dans l'autre onglet apparaît en fin de ligne."](verification.png)
 
