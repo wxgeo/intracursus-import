@@ -3,6 +3,7 @@ Import scores of students from an Excel file into an Intracursus file.
 """
 from collections import Counter
 from dataclasses import field, dataclass
+from functools import cache
 from pathlib import Path
 
 import pyexcel_ods3
@@ -63,6 +64,7 @@ class UnknownNameError(RuntimeError):
     """Error raised when no corresponding name was found in intracursus sheet."""
 
 
+@cache
 def norm(name: str) -> set[str]:
     name = name.casefold()
     # Suppression des accents
@@ -71,21 +73,30 @@ def norm(name: str) -> set[str]:
 
 
 def match(name1: str, name2: str) -> bool:
+    """Test whether A = B, where A and B are names converted to sets of words."""
     return norm(name1) == norm(name2)
 
 
 def contain(name1: str, name2: str) -> bool:
+    """Test whether A ⊂ B or B ⊂ A, where A and B are names converted to sets of words."""
     s1 = norm(name1)
     s2 = norm(name2)
     return s1.issubset(s2) or s2.issubset(s1)
 
 
 def partial_match(name1: str, name2: str) -> bool:
-    """Il suffit d'un prénom commun pour que la comparaison réussisse...
+    """At last resort, test whether A ∩ B ≠ ∅.
 
-    À utiliser en dernier recours, mais peut être utile (étudiant enregistré
-    avec le name de famille du père ou de la mère selon la BDD par exemple)."""
-    return not norm(name1).isdisjoint(norm(name2))
+    Some students may be registered once with their mother name, and once with their father one,
+    so this may prove useful.
+
+    Very small words (length <= 2) like "de" are not considered, since they're meaningless and
+    may induce false positives.
+    (Ex: "Charles de Gaulle" et "Jean de Lattre de Tassigny").
+    """
+    intersection = norm(name1) & norm(name2)
+    count = sum(1 for word in intersection if len(word) >= 3)
+    return count >= 1
 
 
 def seems_an_intracursus_file(sheet: SheetData) -> bool:
@@ -158,7 +169,7 @@ def get_intracursus_data(sheet: SheetData) -> IntracursusData:
 
 def translate_names(
     other_names: list[str], intracursus_names: list[str]
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, str]]:
     """Return a dict {name in intracursus sheet: name in other sheet}"""
     others = set(other_names)
     intracursus = set(intracursus_names)
@@ -168,8 +179,9 @@ def translate_names(
             (name, count) for name, count in Counter(other_names).items() if count > 1
         )
         raise DuplicateNamesError(f"The same name was found {count} times: {name!r}.")
-    found = ProtectedDict(dict.fromkeys(intracursus))
 
+    found = ProtectedDict(dict.fromkeys(intracursus))
+    to_be_verified: dict[str, str] = {}
     # First pass: same name (without order)
     # Second pass: one name is included in the other
     # Third pass: partial match
@@ -178,39 +190,49 @@ def translate_names(
             for intra in intracursus:
                 if matching_function(other, intra):
                     found[intra] = other
+                    if matching_function is partial_match:
+                        to_be_verified[intra] = other
         others -= set(found.values())
         intracursus -= set(found)
 
     for name in others:
         raise UnknownNameError(f"Name not found in Intracursus list: {name!r}.")
-    return found
+    return found, to_be_verified
 
 
 def update_intracursus_data(
     intracursus_data: IntracursusData, other_data: OtherData
-) -> None:
+) -> dict[str, str]:
+    to_be_verified: dict[str, str] = {}
     if other_data.ids:
         scores: dict[int, float] = dict(zip(other_data.ids, other_data.scores))
         intracursus_data.scores = [scores[id_] for id_ in intracursus_data.ids]
     else:
-        names_translation = translate_names(other_data.names, intracursus_data.names)
+        names_translation, to_be_verified = translate_names(
+            other_data.names, intracursus_data.names
+        )
         scores: dict[str, float] = dict(zip(other_data.names, other_data.scores))
         intracursus_data.scores = [
             scores.get(names_translation.get(name), "ABI")
             for name in intracursus_data.names
         ]
+    return to_be_verified
 
 
 def fill_scores(intracursus_sheet: SheetData, other_sheet: SheetData) -> None:
     intracursus_data = get_intracursus_data(intracursus_sheet)
     other_data: OtherData = get_other_data(other_sheet)
-    update_intracursus_data(intracursus_data, other_data)
-    for i, score in enumerate(intracursus_data.scores):
+    to_be_verified = update_intracursus_data(intracursus_data, other_data)
+    for i, score in enumerate(intracursus_data.scores, start=6):
         if isinstance(score, str) and score.startswith("#"):
             score = "ABI"
-        if not (intracursus_sheet[6 + i][0] == "" and score == "ABI"):
+        if not (intracursus_sheet[i][0] == "" and score == "ABI"):
             # Update score, unless there is already a score and new score is unknown ("ABI")
-            intracursus_sheet[6 + i][3] = score
+            intracursus_sheet[i][3] = score
+        first_name, last_name = intracursus_sheet[i][1:3]
+        name = f"{first_name} {last_name}"
+        if name in to_be_verified:
+            intracursus_sheet[i].append(to_be_verified[last_name] + " ?")
 
 
 def import_scores(intracursus_file: Path) -> None:
