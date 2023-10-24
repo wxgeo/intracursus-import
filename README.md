@@ -21,6 +21,10 @@ ne sont pas forcément écrits exactement pareil.
 3. Lancer `import-scores <fichier.ods>`
 4. Un fichier `<fichier-merged.ods>` est généré, importable depuis Intracursus.
 
+![alt "Créer une autre feuille."](new_sheet.png)
+
+![alt "Entrez les notes dans la 2e feuille."](scores_in_new_sheet.png)
+
 ### Remarques sur les données copiées
 * Si elles comportent plusieurs colonnes de nombres, seule la dernière colonne de nombres sera prise en compte.
 * Si les identifiants (INE) sont présents, l'import des notes se basera sur ces identifiants. (Les identifiants sont détectés comme une colonne de nombres > 1 000 000).
