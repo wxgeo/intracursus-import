@@ -25,7 +25,7 @@ black = "^23.10.0"
 mypy = "^1.6.1"
 
 [tool.poetry.scripts]
-import-scores = 'intracursus_import.intracursus_import:main'
+import-scores = 'intracursus_import.import_scores:main'
 
 [tool.tox]
 legacy_tox_ini = """
