@@ -43,9 +43,8 @@ Ex: `"Jean-Rémi  Rackam--Lerouge"` -> `{"jean", "remi", "rackam", "lerouge"}`
      On ne tient pas compte des mots de taille inférieure ou égale à 2 (Ex: "de").
 
 La dernière passe a un risque non négligeable de faux positifs. 
-Par conséquent, on rajoute en fin de ligne dans le fichier fusionné le nom complet
-correspondant ayant servi à la fusion, afin de pouvoir vérifier que la correspondance
-est correcte.
+Dans ce cas, dans le fichier généré, le nom tel qu'il apparaissait dans les données à fusionner est ajouté en fin de ligne.
+Cela permet de vérifier que la correspondance est bien correcte.
 
 ![alt "Le nom tel que saisi dans l'autre onglet apparaît en fin de ligne."](verification.png)
 
