@@ -32,18 +32,6 @@ class OtherData:
     scores: list[float | str] = field(default_factory=list)
 
 
-class ProtectedDict(dict):
-    """Only authorize setting keys once. Keys are predefined first."""
-
-    def __setitem__(self, key, value):
-        try:
-            if self[key] is not None:
-                raise ValueError("Key already set !")
-            dict.__setitem__(self, key, value)
-        except KeyError:
-            raise KeyError(f"Unknown key: {key} !")
-
-
 class NotAnIntracursusFileError(RuntimeError):
     """Error raised when the file does not look like an Intracursus file."""
 
@@ -177,7 +165,7 @@ def translate_names(
         name, count = next((name, count) for name, count in Counter(other_names).items() if count > 1)
         raise DuplicateNamesError(f"The same name was found {count} times: {name!r}.")
 
-    found = ProtectedDict(dict.fromkeys(intracursus))
+    found: dict[str, str] = {}
     to_be_verified: dict[str, str] = {}
     # First pass: same name (without order)
     # Second pass: one name is included in the other
@@ -186,6 +174,10 @@ def translate_names(
         for other in others:
             for intra in intracursus:
                 if matching_function(other, intra):
+                    assert intra not in found, (
+                        f"Key {intra=} appears already in dict {found=},"
+                        f" it should have been removed from {intracursus=} ! "
+                    )
                     found[intra] = other
                     if matching_function is partial_match:
                         to_be_verified[intra] = other
