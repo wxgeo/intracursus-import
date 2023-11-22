@@ -11,7 +11,7 @@ TEST_DIR = Path(__file__).parent
 def test_intracursus_import(tmp_path):
     ods_file = "Liste-Seance-2-TBFTR106-2023-2024.ods"
     shutil.copy(TEST_DIR / ods_file, tmp_path)
-    import_scores(tmp_path / ods_file)
+    import_scores(str(tmp_path / ods_file))
 
     data = pyexcel_ods3.get_data(str(tmp_path / ods_file.replace(".ods", "-merged.ods")))
     sheet_data = data["TBFTR106-2020-2021"]
